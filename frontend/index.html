@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Canteen Token & Queue Management System</title>
+
+  <!-- QR Code & PDF Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: #fde7e3;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      background-color: #ff3f33;
+      color: white;
+      text-align: center;
+      padding: 20px;
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    .container {
+      display: flex;
+      justify-content: space-between;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .dashboard {
+      flex: 1;
+      background-color: #fde7e3;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .dashboard h2 {
+      color: #075e5e;
+      text-align: center;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin-bottom: 10px;
+      font-size: 15px;
+    }
+
+    button {
+      background-color: #ff3f33;
+      border: none;
+      color: white;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background-color: #e32f25;
+    }
+
+    .menu-item {
+      background-color: #c1d993;
+      padding: 10px;
+      margin: 6px 0;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+
+    th {
+      background-color: #ff3f33;
+      color: white;
+    }
+
+    td button {
+      background-color: #075e5e;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    td button:hover {
+      background-color: #054d4d;
+    }
+
+    #qrContainer {
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>🍴 Smart Canteen Token & Queue Management System</header>
+
+  <div class="container">
+    <!-- User Dashboard -->
+    <div class="dashboard user-dashboard">
+      <h2>User Dashboard</h2>
+      <input type="text" id="userName" placeholder="Enter your name" />
+      <input type="text" id="userRole" placeholder="Enter your role (Student/Staff)" />
+      <button id="saveUserBtn">Save</button>
+
+      <h3>Menu</h3>
+      <div id="menuList"></div>
+
+      <h3>Total Calorie Intake:</h3>
+      <p id="totalCalories">0 kcal</p>
+
+      <div id="orderActions" style="display:none;">
+        <div id="qrContainer"></div>
+        <button id="downloadBtn">Download Receipt</button>
+      </div>
+
+      <h3>Feedback & Rating</h3>
+      <textarea id="feedbackText" placeholder="Your feedback..."></textarea>
+      <select id="rating">
+        <option value="">Select rating</option>
+        <option value="5">⭐⭐⭐⭐⭐</option>
+        <option value="4">⭐⭐⭐⭐</option>
+        <option value="3">⭐⭐⭐</option>
+        <option value="2">⭐⭐</option>
+        <option value="1">⭐</option>
+      </select>
+      <button id="submitFeedback">Submit Feedback</button>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div class="dashboard admin-dashboard">
+      <h2>Admin Dashboard</h2>
+      <input type="text" id="adminName" placeholder="Enter admin name" />
+      <button id="saveAdminBtn">Save</button>
+
+      <h3>All Orders</h3>
+      <table id="ordersTable">
+        <thead>
+          <tr><th>Token</th><th>User</th><th>Item</th><th>Status</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>Feedback Overview</h3>
+      <table id="feedbackTable">
+        <thead><tr><th>User</th><th>Feedback</th><th>Rating</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const menuItems = [
+      { name: "Veg Meal", price: 50, cal: 500 },
+      { name: "Chicken Meal", price: 90, cal: 700 },
+      { name: "Sandwich", price: 40, cal: 250 },
+      { name: "Juice", price: 25, cal: 120 },
+      { name: "Fried Rice", price: 60, cal: 600 },
+      { name: "Parotta with Kurma", price: 70, cal: 680 },
+      { name: "Noodles", price: 55, cal: 500 },
+      { name: "Chapathi with Gravy", price: 50, cal: 400 },
+      { name: "Coffee", price: 20, cal: 80 },
+    ];
+
+    let tokenCount = parseInt(localStorage.getItem("tokenCount") || "1");
+    let totalCalories = 0;
+
+    // Load data
+    window.onload = function () {
+      const savedOrders = JSON.parse(localStorage.getItem("orders")) || [];
+      const savedFeedback = JSON.parse(localStorage.getItem("feedback")) || [];
+
+      document.getElementById("userName").value = localStorage.getItem("userName") || "";
+      document.getElementById("userRole").value = localStorage.getItem("userRole") || "";
+      document.getElementById("adminName").value = localStorage.getItem("adminName") || "";
+
+      menuItems.forEach(i => {
+        document.getElementById("menuList").innerHTML += `
+          <div class='menu-item'>${i.name} - ₹${i.price} (${i.cal} kcal)
+          <button onclick="placeOrder('${i.name}', ${i.cal})">Order</button></div>`;
+      });
+
+      savedOrders.forEach(o => addOrderToTable(o));
+      savedFeedback.forEach(f => addFeedbackToTable(f));
+    };
+
+    // Save user/admin details
+    document.getElementById("saveUserBtn").onclick = () => {
+      localStorage.setItem("userName", userName.value);
+      localStorage.setItem("userRole", userRole.value);
+      alert("User details saved!");
+    };
+    document.getElementById("saveAdminBtn").onclick = () => {
+      localStorage.setItem("adminName", adminName.value);
+      alert("Admin details saved!");
+    };
+
+    // Place Order
+    function placeOrder(item, cal) {
+      const name = userName.value || "Guest";
+      const order = { token: tokenCount++, user: name, item, status: "Pending" };
+      totalCalories += cal;
+      document.getElementById("totalCalories").innerText = `${totalCalories} kcal`;
+
+      const orders = JSON.parse(localStorage.getItem("orders")) || [];
+      orders.push(order);
+      localStorage.setItem("orders", JSON.stringify(orders));
+      localStorage.setItem("tokenCount", tokenCount);
+
+      addOrderToTable(order);
+      showOrderSuccess(order);
+    }
+
+    // Add order to admin table
+    function addOrderToTable(order) {
+      const tbody = document.querySelector("#ordersTable tbody");
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${order.token}</td>
+        <td>${order.user}</td>
+        <td>${order.item}</td>
+        <td><button onclick="toggleStatus(${order.token})">${order.status}</button></td>`;
+      tbody.appendChild(row);
+    }
+
+    // Toggle status
+    function toggleStatus(token) {
+      let orders = JSON.parse(localStorage.getItem("orders")) || [];
+      orders = orders.map(o => {
+        if (o.token === token) o.status = o.status === "Pending" ? "Served" : "Pending";
+        return o;
+      });
+      localStorage.setItem("orders", JSON.stringify(orders));
+      refreshOrders();
+    }
+
+    function refreshOrders() {
+      const tbody = document.querySelector("#ordersTable tbody");
+      tbody.innerHTML = "";
+      const orders = JSON.parse(localStorage.getItem("orders")) || [];
+      orders.forEach(addOrderToTable);
+    }
+
+    // Show QR & PDF button
+    function showOrderSuccess(order) {
+      const qrDiv = document.getElementById("qrContainer");
+      qrDiv.innerHTML = "";
+      new QRCode(qrDiv, {
+        text: `Order Token: ${order.token}\nItem: ${order.item}\nUser: ${order.user}`,
+        width: 100,
+        height: 100,
+      });
+      document.getElementById("orderActions").style.display = "block";
+
+      document.getElementById("downloadBtn").onclick = () => downloadPDF(order);
+    }
+
+    // Download order summary as PDF
+    function downloadPDF(order) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Smart Canteen Order Summary", 20, 20);
+      doc.text(`Token: ${order.token}`, 20, 40);
+      doc.text(`User: ${order.user}`, 20, 50);
+      doc.text(`Item: ${order.item}`, 20, 60);
+      doc.text(`Status: ${order.status}`, 20, 70);
+      doc.text(`Total Calories: ${totalCalories} kcal`, 20, 80);
+      doc.save(`Order_${order.token}.pdf`);
+    }
+
+    // Feedback system
+    document.getElementById("submitFeedback").onclick = () => {
+      const fb = feedbackText.value.trim();
+      const rating = document.getElementById("rating").value;
+      const user = userName.value || "Guest";
+
+      if (!fb || !rating) return alert("Please enter feedback and rating!");
+
+      const feedback = { user, fb, rating };
+      const feedbacks = JSON.parse(localStorage.getItem("feedback")) || [];
+      feedbacks.push(feedback);
+      localStorage.setItem("feedback", JSON.stringify(feedbacks));
+      addFeedbackToTable(feedback);
+      feedbackText.value = "";
+      rating.value = "";
+      alert("Feedback submitted!");
+    };
+
+    function addFeedbackToTable(fb) {
+      const tbody = document.querySelector("#feedbackTable tbody");
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${fb.user}</td><td>${fb.fb}</td><td>${fb.rating}⭐</td>`;
+      tbody.appendChild(row);
+    }
+  </script>
+</body>
+</html>
